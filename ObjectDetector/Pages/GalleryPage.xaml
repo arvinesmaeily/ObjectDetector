@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ObjectDetector.Pages.GalleryPage"
+             Title="Gallery">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="10">
+
+        <!-- Header -->
+        <VerticalStackLayout Grid.Row="0" Spacing="10" Padding="10">
+            <Label Text="Select Image for Detection" 
+                   FontSize="20" 
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center" />
+            <Button Text="📂 Pick Image" 
+                    Clicked="OnPickImageClicked"
+                    BackgroundColor="#007ACC"
+                    TextColor="White" />
+        </VerticalStackLayout>
+
+        <!-- Image Display with Overlay -->
+        <Grid Grid.Row="1" Margin="10">
+            <Image x:Name="SelectedImage" 
+                   Aspect="AspectFit"
+                   BackgroundColor="#F0F0F0" />
+            <GraphicsView x:Name="OverlayView"
+                          BackgroundColor="Transparent"
+                          InputTransparent="True" />
+        </Grid>
+
+        <!-- Results -->
+        <VerticalStackLayout Grid.Row="2" Spacing="5" Padding="10">
+            <Label x:Name="ResultLabel" 
+                   Text="No image selected" 
+                   FontSize="14"
+                   HorizontalOptions="Center" />
+        </VerticalStackLayout>
+
+    </Grid>
+
+</ContentPage>

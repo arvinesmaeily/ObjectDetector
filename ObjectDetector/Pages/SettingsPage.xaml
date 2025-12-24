@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ObjectDetector.Pages.SettingsPage"
+             Title="Settings">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="15">
+
+            <Label Text="Settings" 
+                   FontSize="24" 
+                   FontAttributes="Bold"
+                   Margin="0,0,0,20" />
+
+            <!-- Detection Settings -->
+            <Frame BorderColor="LightGray" Padding="15">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Detection Settings" FontSize="18" FontAttributes="Bold" />
+
+                    <Label Text="Default Confidence Threshold" />
+                    <HorizontalStackLayout Spacing="10">
+                        <Slider x:Name="ConfidenceSlider" 
+                                Minimum="0" 
+                                Maximum="1" 
+                                Value="0.25"
+                                WidthRequest="250"
+                                ValueChanged="OnConfidenceChanged" />
+                        <Label x:Name="ConfidenceLabel" Text="0.25" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+
+                    <Label Text="Default IoU Threshold" />
+                    <HorizontalStackLayout Spacing="10">
+                        <Slider x:Name="IouSlider" 
+                                Minimum="0.1" 
+                                Maximum="0.9" 
+                                Value="0.45"
+                                WidthRequest="250"
+                                ValueChanged="OnIouChanged" />
+                        <Label x:Name="IouLabel" Text="0.45" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- App Information -->
+            <Frame BorderColor="LightGray" Padding="15">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="About" FontSize="18" FontAttributes="Bold" />
+                    <Label Text="Object Detector" FontSize="16" />
+                    <Label Text="Version 1.0.0" FontSize="14" TextColor="Gray" />
+                    <Label Text="Powered by YOLOv11" FontSize="14" TextColor="Gray" />
+                </VerticalStackLayout>
+            </Frame>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

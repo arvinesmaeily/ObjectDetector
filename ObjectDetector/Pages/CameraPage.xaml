@@ -1,0 +1,97 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+             x:Class="ObjectDetector.Pages.CameraPage"
+             Title="Camera">
+
+    <Grid RowDefinitions="*,Auto" ColumnDefinitions="*">
+        <!-- Main camera and overlay area -->
+        <Grid Grid.Row="0" Grid.Column="0" RowDefinitions="*" ColumnDefinitions="*">
+            <!-- Camera preview -->
+            <toolkit:CameraView
+                x:Name="Camera"
+                Grid.Row="0"
+                Grid.Column="0"/>
+
+            <!-- Overlay for YOLO boxes -->
+            <GraphicsView
+                x:Name="OverlayView"
+                Grid.Row="0"
+                Grid.Column="0"
+                BackgroundColor="Transparent"
+                InputTransparent="True" />
+
+            <!-- Stats panel (top-left) -->
+            <VerticalStackLayout
+                Grid.Row="0"
+                Grid.Column="0"
+                Padding="10"
+                Spacing="5"
+                VerticalOptions="Start"
+                HorizontalOptions="Start">
+                <Label x:Name="FpsLabel" Text="FPS: 0" FontSize="12" TextColor="White" />
+                <Label x:Name="DetectionCountLabel" Text="Detections: 0" FontSize="12" TextColor="White" />
+                <Label x:Name="ThresholdValueLabel" Text="Threshold: 0.25" FontSize="12" TextColor="White" />
+            </VerticalStackLayout>
+        </Grid>
+
+        <!-- Controls panel (bottom) -->
+        <Grid Grid.Row="1" Grid.Column="0" ColumnDefinitions="*" RowDefinitions="Auto,Auto,Auto" 
+              Padding="10" BackgroundColor="#1E1E1E">
+
+            <!-- Confidence Threshold Slider -->
+            <VerticalStackLayout Grid.Row="0" Grid.Column="0" Spacing="5">
+                <Label Text="Confidence Threshold" FontSize="14" FontAttributes="Bold" TextColor="White" />
+                <Slider 
+                    x:Name="ThresholdSlider"
+                    Minimum="0" 
+                    Maximum="1" 
+                    Value="0.25"
+                    ValueChanged="OnThresholdChanged"
+                    BackgroundColor="#333333" />
+            </VerticalStackLayout>
+
+            <!-- IoU Threshold Slider -->
+            <VerticalStackLayout Grid.Row="1" Grid.Column="0" Spacing="5">
+                <Label Text="IoU Threshold (NMS)" FontSize="14" FontAttributes="Bold" TextColor="White" />
+                <Slider 
+                    x:Name="IouSlider"
+                    Minimum="0.1" 
+                    Maximum="0.9" 
+                    Value="0.45"
+                    ValueChanged="OnIouChanged"
+                    BackgroundColor="#333333" />
+            </VerticalStackLayout>
+
+            <!-- Buttons Row -->
+            <HorizontalStackLayout Grid.Row="2" Grid.Column="0" HorizontalOptions="Center" Spacing="10">
+                <Button 
+                    x:Name="CaptureButton"
+                    Text="📷 Capture"
+                    Clicked="OnCaptureClicked"
+                    BackgroundColor="#007ACC"
+                    TextColor="White"
+                    Padding="15,10"
+                    FontSize="14" />
+                <Button 
+                    x:Name="ToggleDetectionsButton"
+                    Text="👁️ Hide Boxes"
+                    Clicked="OnToggleDetections"
+                    BackgroundColor="#6A737D"
+                    TextColor="White"
+                    Padding="15,10"
+                    FontSize="14" />
+                <Button 
+                    x:Name="OpenFolderButton"
+                    Text="📁 Open Folder"
+                    Clicked="OnOpenFolderClicked"
+                    BackgroundColor="#28A745"
+                    TextColor="White"
+                    Padding="15,10"
+                    FontSize="14" />
+            </HorizontalStackLayout>
+        </Grid>
+    </Grid>
+
+</ContentPage>
