@@ -1,4 +1,4 @@
-﻿namespace Services
+﻿namespace ObjectDetector.Services
 {
     public record Detection(
         float X,

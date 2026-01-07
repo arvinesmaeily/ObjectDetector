@@ -4,12 +4,15 @@ using System.Diagnostics;
 using System.Numerics.Tensors;
 
 
-namespace Services
+namespace ObjectDetector.Services
 {
     public class YoloDetector : IDisposable
     {
         private readonly InferenceSession _session;
         private readonly string _inputName;
+
+        private const string FloatModelAssetName = "yolo11m.onnx";
+        private const string Int8ModelAssetName = "yolo11m_int8.onnx";
 
         private static readonly string[] ClassNames = new[]
 {
@@ -27,61 +30,121 @@ namespace Services
 
         public YoloDetector()
         {
-            var modelPath = Path.Combine(
-                FileSystem.AppDataDirectory,
-                "yolo11m.onnx"
-            );
+            // Keep app-local copies of the packaged models. This avoids issues with native ORT APIs that need file paths.
+            var floatModelPath = EnsureModelCopiedToAppData(FloatModelAssetName);
+            var int8ModelPath = EnsureModelCopiedToAppData(Int8ModelAssetName);
 
-            if (!File.Exists(modelPath))
+            (_session, _inputName) = CreateSessionWithBestModel(floatModelPath, int8ModelPath);
+        }
+
+        private static string EnsureModelCopiedToAppData(string assetName)
+        {
+            var targetPath = Path.Combine(FileSystem.AppDataDirectory, assetName);
+
+            using var packagedStream = FileSystem.OpenAppPackageFileAsync(assetName).Result;
+
+            // Copy only if missing or different (length check first; then content check as needed).
+            bool needsCopy = true;
+            if (File.Exists(targetPath))
             {
-                using var stream = FileSystem.OpenAppPackageFileAsync("yolo11m.onnx").Result;
-                using var fileStream = File.Create(modelPath);
-                stream.CopyTo(fileStream);
+                try
+                {
+                    var existingInfo = new FileInfo(targetPath);
+                    if (existingInfo.Length == packagedStream.Length)
+                    {
+                        // Same length; assume same for now to avoid hashing overhead.
+                        needsCopy = false;
+                    }
+                }
+                catch
+                {
+                    needsCopy = true;
+                }
             }
 
-            SessionOptions opts = new SessionOptions();
+            if (needsCopy)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
+                using var fileStream = File.Create(targetPath);
+                packagedStream.CopyTo(fileStream);
+            }
 
+            return targetPath;
+        }
+
+        private static (InferenceSession session, string inputName) CreateSessionWithBestModel(string floatModelPath, string int8ModelPath)
+        {
+            // Platform intent:
+            // - Windows: prefer DirectML; INT8 model is OK.
+            // - Android: prefer NNAPI; INT8 model may or may not work depending on device/driver; try it first.
+            // - iOS/MacCatalyst: use CPU (CoreML EP not wired up here).
 
             if (DeviceInfo.Platform == DevicePlatform.WinUI)
             {
-                try
-                {
-                    opts.AppendExecutionProvider_DML();
-                    Debug.WriteLine("[ONNX] Using DirectML (GPU acceleration)");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ONNX] DirectML not available: {ex.Message}");
-                    Debug.WriteLine("[ONNX] Falling back to CPU");
-                }
+                // Attempt: INT8 + DirectML -> FP + DirectML -> FP CPU
+                return TryCreateWindowsSession(int8ModelPath)
+                    ?? TryCreateWindowsSession(floatModelPath)
+                    ?? CreateCpuSession(floatModelPath);
+            }
 
-                Debug.WriteLine("[ONNX] Using CPU on Windows");
+            if (DeviceInfo.Platform == DevicePlatform.Android)
+            {
+                // Attempt: INT8 + NNAPI -> FP + NNAPI -> FP CPU
+                return TryCreateAndroidSession(int8ModelPath)
+                    ?? TryCreateAndroidSession(floatModelPath)
+                    ?? CreateCpuSession(floatModelPath);
+            }
 
-            }
-            else if (DeviceInfo.Platform == DevicePlatform.Android)
+            // Default (iOS/MacCatalyst): CPU with FP model
+            Debug.WriteLine("[ONNX] Using CPU");
+            return CreateCpuSession(floatModelPath);
+        }
+
+        private static (InferenceSession session, string inputName)? TryCreateWindowsSession(string modelPath)
+        {
+            var opts = new SessionOptions();
+            try
             {
-                try
-                {
-                    opts.AppendExecutionProvider_Nnapi();
-                    Debug.WriteLine("[ONNX] Using NNAPI (AI accelerator)");
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ONNX] NNAPI not available: {ex.Message}");
-                    Debug.WriteLine("[ONNX] Falling back to CPU");
-                }
+                opts.AppendExecutionProvider_DML();
+                var s = new InferenceSession(modelPath, opts);
+                Debug.WriteLine($"[ONNX] Windows: Using DirectML with {Path.GetFileName(modelPath)}");
+                return (s, s.InputMetadata.Keys.First());
             }
-            else
+            catch (Exception ex)
             {
-                Debug.WriteLine("[ONNX] Using CPU");
+                Debug.WriteLine($"[ONNX] Windows: DirectML init failed for {Path.GetFileName(modelPath)}: {ex.Message}");
+                opts.Dispose();
+                return null;
             }
-            
-            _session = new InferenceSession(modelPath, opts);
-            _inputName = _session.InputMetadata.Keys.First();
+        }
+
+        private static (InferenceSession session, string inputName)? TryCreateAndroidSession(string modelPath)
+        {
+            var opts = new SessionOptions();
+            try
+            {
+                opts.AppendExecutionProvider_Nnapi();
+                var s = new InferenceSession(modelPath, opts);
+                Debug.WriteLine($"[ONNX] Android: Using NNAPI with {Path.GetFileName(modelPath)}");
+                return (s, s.InputMetadata.Keys.First());
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ONNX] Android: NNAPI init failed for {Path.GetFileName(modelPath)}: {ex.Message}");
+                opts.Dispose();
+                return null;
+            }
+        }
+
+        private static (InferenceSession session, string inputName) CreateCpuSession(string modelPath)
+        {
+            var s = new InferenceSession(modelPath, new SessionOptions());
+            Debug.WriteLine($"[ONNX] Using CPU with {Path.GetFileName(modelPath)}");
+            return (s, s.InputMetadata.Keys.First());
         }
 
 
-        public IReadOnlyList<Detection> Detect(float[] imageData, int width, int height, float confidenceThreshold = 0.25f, float iouThreshold = 0.45f)
+        public List<Detection> Detect(float[] imageData, int width, int height, float confidenceThreshold = 0.25f, float iouThreshold = 0.45f)
         {
             // YOLO input: [1,3,H,W]
             var inputDims = new[] { 1, 3, height, width };
@@ -103,20 +166,20 @@ namespace Services
             return Decode(raw, dims, confidenceThreshold, iouThreshold);
         }
 
-        private IReadOnlyList<Detection> Decode(
+        private List<Detection> Decode(
             float[] raw, int[] dims,
             float confThreshold = 0.25f, float iouThreshold = 0.45f)
         {
             // Expect 3D: [1, C, N] or [1, N, C]
             if (dims.Length != 3)
-                return Array.Empty<Detection>();
+                return [];
 
             int batch = dims[0];
             int d1 = dims[1];
             int d2 = dims[2];
 
             if (batch != 1)
-                return Array.Empty<Detection>();
+                return [];
 
             int numBoxes, elemPerBox;
             bool boxesFirst;
@@ -216,13 +279,13 @@ namespace Services
 
             // Case 2: Standard YOLO – [x,y,w,h,obj,cls0..clsN]
             if (elemPerBox < 5)
-                return Array.Empty<Detection>(); // malformed
+                return [];
 
             int numClasses = elemPerBox - 5;   // 4 box + 1 obj + classes
             Debug.WriteLine($"Standard YOLO: numClasses={numClasses}, elemPerBox={elemPerBox}");
-            
+
             if (numBoxes <= 0 || numClasses <= 0)
-                return Array.Empty<Detection>();
+                return [];
 
             if (boxesFirst)
             {
@@ -363,7 +426,11 @@ namespace Services
         }
 
 
-        public void Dispose() => _session.Dispose();
+        public void Dispose()
+        {
+            _session.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 
 

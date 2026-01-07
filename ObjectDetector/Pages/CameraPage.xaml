@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
              x:Class="ObjectDetector.Pages.CameraPage"
-             Title="Camera">
+             Title="Camera"
+             BackgroundColor="{AppThemeBinding Light=White, Dark=#121212}">
 
     <Grid RowDefinitions="*,Auto" ColumnDefinitions="*">
         <!-- Main camera and overlay area -->
@@ -32,40 +33,15 @@
                 HorizontalOptions="Start">
                 <Label x:Name="FpsLabel" Text="FPS: 0" FontSize="12" TextColor="White" />
                 <Label x:Name="DetectionCountLabel" Text="Detections: 0" FontSize="12" TextColor="White" />
-                <Label x:Name="ThresholdValueLabel" Text="Threshold: 0.25" FontSize="12" TextColor="White" />
             </VerticalStackLayout>
         </Grid>
 
         <!-- Controls panel (bottom) -->
-        <Grid Grid.Row="1" Grid.Column="0" ColumnDefinitions="*" RowDefinitions="Auto,Auto,Auto" 
-              Padding="10" BackgroundColor="#1E1E1E">
-
-            <!-- Confidence Threshold Slider -->
-            <VerticalStackLayout Grid.Row="0" Grid.Column="0" Spacing="5">
-                <Label Text="Confidence Threshold" FontSize="14" FontAttributes="Bold" TextColor="White" />
-                <Slider 
-                    x:Name="ThresholdSlider"
-                    Minimum="0" 
-                    Maximum="1" 
-                    Value="0.25"
-                    ValueChanged="OnThresholdChanged"
-                    BackgroundColor="#333333" />
-            </VerticalStackLayout>
-
-            <!-- IoU Threshold Slider -->
-            <VerticalStackLayout Grid.Row="1" Grid.Column="0" Spacing="5">
-                <Label Text="IoU Threshold (NMS)" FontSize="14" FontAttributes="Bold" TextColor="White" />
-                <Slider 
-                    x:Name="IouSlider"
-                    Minimum="0.1" 
-                    Maximum="0.9" 
-                    Value="0.45"
-                    ValueChanged="OnIouChanged"
-                    BackgroundColor="#333333" />
-            </VerticalStackLayout>
+        <Grid Grid.Row="1" Grid.Column="0" ColumnDefinitions="*" RowDefinitions="Auto" 
+              Padding="10" BackgroundColor="{AppThemeBinding Light=#F5F5F5, Dark=#1E1E1E}">
 
             <!-- Buttons Row -->
-            <HorizontalStackLayout Grid.Row="2" Grid.Column="0" HorizontalOptions="Center" Spacing="10">
+            <HorizontalStackLayout Grid.Row="0" Grid.Column="0" HorizontalOptions="Center" Spacing="10">
                 <Button 
                     x:Name="CaptureButton"
                     Text="📷 Capture"
@@ -79,14 +55,6 @@
                     Text="👁️ Hide Boxes"
                     Clicked="OnToggleDetections"
                     BackgroundColor="#6A737D"
-                    TextColor="White"
-                    Padding="15,10"
-                    FontSize="14" />
-                <Button 
-                    x:Name="OpenFolderButton"
-                    Text="📁 Open Folder"
-                    Clicked="OnOpenFolderClicked"
-                    BackgroundColor="#28A745"
                     TextColor="White"
                     Padding="15,10"
                     FontSize="14" />

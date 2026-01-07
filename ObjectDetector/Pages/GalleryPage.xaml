@@ -2,7 +2,8 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="ObjectDetector.Pages.GalleryPage"
-             Title="Gallery">
+             Title="Gallery"
+             BackgroundColor="{AppThemeBinding Light=White, Dark=#121212}">
 
     <Grid RowDefinitions="Auto,*,Auto" Padding="10">
 
@@ -11,6 +12,7 @@
             <Label Text="Select Image for Detection" 
                    FontSize="20" 
                    FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light=Black, Dark=White}"
                    HorizontalOptions="Center" />
             <Button Text="📂 Pick Image" 
                     Clicked="OnPickImageClicked"
@@ -22,18 +24,28 @@
         <Grid Grid.Row="1" Margin="10">
             <Image x:Name="SelectedImage" 
                    Aspect="AspectFit"
-                   BackgroundColor="#F0F0F0" />
+                   BackgroundColor="{AppThemeBinding Light=#F0F0F0, Dark=#2D2D2D}" />
             <GraphicsView x:Name="OverlayView"
                           BackgroundColor="Transparent"
                           InputTransparent="True" />
         </Grid>
 
-        <!-- Results -->
-        <VerticalStackLayout Grid.Row="2" Spacing="5" Padding="10">
+        <!-- Results and Actions -->
+        <VerticalStackLayout Grid.Row="2" Spacing="10" Padding="10">
             <Label x:Name="ResultLabel" 
                    Text="No image selected" 
                    FontSize="14"
+                   TextColor="{AppThemeBinding Light=Black, Dark=White}"
                    HorizontalOptions="Center" />
+            
+            <HorizontalStackLayout HorizontalOptions="Center" Spacing="10">
+                <Button x:Name="SaveButton"
+                        Text="💾 Save Image"
+                        Clicked="OnSaveImageClicked"
+                        BackgroundColor="#28A745"
+                        TextColor="White"
+                        IsVisible="False" />
+            </HorizontalStackLayout>
         </VerticalStackLayout>
 
     </Grid>

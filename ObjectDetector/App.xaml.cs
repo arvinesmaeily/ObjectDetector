@@ -7,6 +7,19 @@ namespace ObjectDetector
         public App()
         {
             InitializeComponent();
+            LoadTheme();
+        }
+
+        private void LoadTheme()
+        {
+            var savedTheme = Preferences.Get("AppTheme", "System");
+            
+            UserAppTheme = savedTheme switch
+            {
+                "Dark" => AppTheme.Dark,
+                "Light" => AppTheme.Light,
+                _ => AppTheme.Unspecified
+            };
         }
 
         protected override Window CreateWindow(IActivationState? activationState)

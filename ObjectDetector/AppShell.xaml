@@ -10,23 +10,35 @@
     <TabBar>
         <ShellContent
             Title="Camera"
-            Icon="dotnet_bot.png"
+            ContentTemplate="{DataTemplate pages:CameraPage}"
             Route="CameraPage">
-            <pages:CameraPage />
+            <ShellContent.Icon>
+                <FontImageSource
+                    FontFamily="SegoeFluent"
+                    Glyph="&#xE722;" />
+            </ShellContent.Icon>
         </ShellContent>
 
         <ShellContent
             Title="Gallery"
-            Icon="dotnet_bot.png"
+            ContentTemplate="{DataTemplate pages:GalleryPage}"
             Route="GalleryPage">
-            <pages:GalleryPage />
+            <ShellContent.Icon>
+                <FontImageSource
+                    FontFamily="SegoeFluent"
+                    Glyph="&#xE91B;" />
+            </ShellContent.Icon>
         </ShellContent>
 
         <ShellContent
             Title="Settings"
-            Icon="dotnet_bot.png"
+            ContentTemplate="{DataTemplate pages:SettingsPage}"
             Route="SettingsPage">
-            <pages:SettingsPage />
+            <ShellContent.Icon>
+                <FontImageSource
+                    FontFamily="SegoeFluent"
+                    Glyph="&#xE713;" />
+            </ShellContent.Icon>
         </ShellContent>
     </TabBar>
 

@@ -1,5 +1,5 @@
 ﻿using CommunityToolkit.Maui.Views;
-using Services;
+using ObjectDetector.Services;
 using SkiaSharp;
 using SkiaSharp.Views.Maui;
 using System.Diagnostics;
@@ -8,7 +8,7 @@ namespace ObjectDetector.Pages
 {
     public partial class CameraPage : ContentPage
     {
-        private YoloDetector? _detector;
+        private readonly YoloDetector? _detector;
         private readonly DetectionDrawable _drawable = new();
         private bool _isProcessing;
         private bool _showDetections = true;
@@ -17,9 +17,12 @@ namespace ObjectDetector.Pages
         private DateTime _lastFrameTime = DateTime.UtcNow;
         private int _frameCount;
         private double _fps;
-        private IReadOnlyList<Detection> _currentDetections = Array.Empty<Detection>();
+        private IReadOnlyList<Detection> _currentDetections = [];
         private CancellationTokenSource? _loopCts;
         private SKBitmap? _lastCapturedFrame;
+
+        private const string ConfidenceThresholdKey = "ConfidenceThreshold";
+        private const string IouThresholdKey = "IouThreshold";
 
         public CameraPage()
         {
@@ -31,6 +34,10 @@ namespace ObjectDetector.Pages
         protected override async void OnAppearing()
         {
             base.OnAppearing();
+
+            // Load thresholds from settings
+            _confidenceThreshold = Preferences.Get(ConfidenceThresholdKey, 0.25f);
+            _iouThreshold = Preferences.Get(IouThresholdKey, 0.45f);
 
             if (!await RequestCameraPermissionAsync())
             {
@@ -45,13 +52,13 @@ namespace ObjectDetector.Pages
         protected override void OnDisappearing()
         {
             base.OnDisappearing();
-            
+
             _loopCts?.Cancel();
             _loopCts?.Dispose();
             _lastCapturedFrame?.Dispose();
         }
 
-        private async Task<bool> RequestCameraPermissionAsync()
+        private static async Task<bool> RequestCameraPermissionAsync()
         {
             try
             {
@@ -69,18 +76,6 @@ namespace ObjectDetector.Pages
                 Debug.WriteLine($"Permission error: {ex}");
                 return false;
             }
-        }
-
-        private void OnThresholdChanged(object sender, ValueChangedEventArgs e)
-        {
-            _confidenceThreshold = (float)e.NewValue;
-            MainThread.BeginInvokeOnMainThread(() =>
-                ThresholdValueLabel.Text = $"Threshold: {_confidenceThreshold:F2}");
-        }
-
-        private void OnIouChanged(object sender, ValueChangedEventArgs e)
-        {
-            _iouThreshold = (float)e.NewValue;
         }
 
         private void OnToggleDetections(object sender, EventArgs e)
@@ -111,52 +106,53 @@ namespace ObjectDetector.Pages
 
                     try
                     {
+                        // Reload thresholds each iteration to pick up changes from Settings
+                        _confidenceThreshold = Preferences.Get(ConfidenceThresholdKey, 0.25f);
+                        _iouThreshold = Preferences.Get(IouThresholdKey, 0.45f);
+
                         using var captureCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
                         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(captureCts.Token, token);
 
-                        using (var imageStream = await Camera.CaptureImage(linkedCts.Token))
+                        using var imageStream = await Camera.CaptureImage(linkedCts.Token);
+                        if (imageStream == null)
                         {
-                            if (imageStream == null)
-                            {
-                                await Task.Delay(100, token);
-                                continue;
-                            }
+                            await Task.Delay(100, token);
+                            continue;
+                        }
 
-                            var (inputData, modelW, modelH, origW, origH, scale, padX, padY) =
-                                await ConvertAndPreprocessAsync(imageStream, targetSize, targetSize);
+                        var (inputData, modelW, modelH, origW, origH, scale, padX, padY, displayW, displayH) =
+                            await ConvertAndPreprocessAsync(imageStream, targetSize, targetSize);
 
-                            var detections = _detector!.Detect(inputData, modelW, modelH, _confidenceThreshold, _iouThreshold);
-                            var detectionsOrig = MapDetectionsToOriginal(detections, scale, padX, padY);
+                        var detections = _detector!.Detect(inputData, modelW, modelH, _confidenceThreshold, _iouThreshold);
+                        var detectionsOrig = MapDetectionsToOriginal(detections, scale, padX, padY);
 
-                            _frameCount++;
-                            var now = DateTime.UtcNow;
-                            var elapsed = (now - _lastFrameTime).TotalSeconds;
+                        _frameCount++;
+                        var now = DateTime.UtcNow;
+                        var elapsed = (now - _lastFrameTime).TotalSeconds;
 
-                            if (elapsed >= 1.0)
-                            {
-                                _fps = _frameCount / elapsed;
-                                _frameCount = 0;
-                                _lastFrameTime = now;
-
-                                MainThread.BeginInvokeOnMainThread(() =>
-                                {
-                                    FpsLabel.Text = $"FPS: {_fps:F1}";
-                                    DetectionCountLabel.Text = $"Detections: {detectionsOrig.Count}";
-                                });
-                            }
-
-                            _currentDetections = detectionsOrig;
+                        if (elapsed >= 1.0)
+                        {
+                            _fps = _frameCount / elapsed;
+                            _frameCount = 0;
+                            _lastFrameTime = now;
 
                             MainThread.BeginInvokeOnMainThread(() =>
                             {
-                                if (_showDetections)
-                                {
-                                    // Pass the OverlayView dimensions for proper scaling
-                                    _drawable.UpdateDetections(detectionsOrig, origW, origH, OverlayView.Width, OverlayView.Height);
-                                }
-                                OverlayView.Invalidate();
+                                FpsLabel.Text = $"FPS: {_fps:F1}";
+                                DetectionCountLabel.Text = $"Detections: {detectionsOrig.Count}";
                             });
                         }
+
+                        _currentDetections = detectionsOrig;
+
+                        MainThread.BeginInvokeOnMainThread(() =>
+                        {
+                            if (_showDetections)
+                            {
+                                _drawable.UpdateDetections(detectionsOrig, displayW, displayH);
+                            }
+                            OverlayView.Invalidate();
+                        });
                     }
                     catch (TaskCanceledException)
                     {
@@ -180,10 +176,10 @@ namespace ObjectDetector.Pages
             }
         }
 
-        private static IReadOnlyList<Detection> MapDetectionsToOriginal(IReadOnlyList<Detection> detections, float scale, int padX, int padY)
+        private static List<Detection> MapDetectionsToOriginal(List<Detection> detections, float scale, int padX, int padY)
         {
             if (detections == null || detections.Count == 0)
-                return Array.Empty<Detection>();
+                return [];
 
             var result = new List<Detection>(detections.Count);
 
@@ -206,37 +202,63 @@ namespace ObjectDetector.Pages
             return result;
         }
 
-        private async Task<(float[] inputData, int modelWidth, int modelHeight, int origWidth, int origHeight, float scale, int padX, int padY)> 
+        private async Task<(float[] inputData, int modelWidth, int modelHeight, int origWidth, int origHeight, float scale, int padX, int padY, int displayWidth, int displayHeight)>
             ConvertAndPreprocessAsync(Stream imageStream, int targetWidth, int targetHeight)
         {
             using var ms = new MemoryStream();
             await imageStream.CopyToAsync(ms);
             ms.Position = 0;
 
-            using var bitmap = SKBitmap.Decode(ms);
-            if (bitmap == null)
-                throw new InvalidOperationException("Failed to decode image.");
-
-            _lastCapturedFrame?.Dispose();
-            _lastCapturedFrame = bitmap.Copy();
-
+            using var bitmap = SKBitmap.Decode(ms) ?? throw new InvalidOperationException("Failed to decode image.");
             int origWidth = bitmap.Width;
             int origHeight = bitmap.Height;
 
+            Debug.WriteLine($"[Camera] Raw bitmap size: {origWidth}x{origHeight}");
+
+            // On Android, camera often captures in landscape but display is portrait
+            // Check if we need to rotate based on aspect ratio mismatch with display
+            SKBitmap workingBitmap = bitmap;
+            int displayWidth = origWidth;
+            int displayHeight = origHeight;
+
+#if ANDROID
+            var displayInfo = DeviceDisplay.MainDisplayInfo;
+            bool displayIsPortrait = displayInfo.Height > displayInfo.Width;
+            bool bitmapIsLandscape = origWidth > origHeight;
+
+            Debug.WriteLine($"[Camera] Display portrait: {displayIsPortrait}, Bitmap landscape: {bitmapIsLandscape}");
+
+            // If display is portrait but bitmap is landscape, rotate 90° clockwise
+            if (displayIsPortrait && bitmapIsLandscape)
+            {
+                Debug.WriteLine("[Camera] Rotating bitmap 90° CW to match display orientation");
+                var rotated = new SKBitmap(origHeight, origWidth);
+                using (var canvas = new SKCanvas(rotated))
+                {
+                    canvas.Translate(origHeight, 0);
+                    canvas.RotateDegrees(90);
+                    canvas.DrawBitmap(bitmap, 0, 0);
+                }
+                workingBitmap = rotated;
+                displayWidth = origHeight;
+                displayHeight = origWidth;
+                Debug.WriteLine($"[Camera] After rotation: {displayWidth}x{displayHeight}");
+            }
+#endif
+
+            _lastCapturedFrame?.Dispose();
+            _lastCapturedFrame = workingBitmap.Copy();
+
             float scale = Math.Min(
-                targetWidth / (float)origWidth,
-                targetHeight / (float)origHeight);
+                targetWidth / (float)displayWidth,
+                targetHeight / (float)displayHeight);
 
-            int resizedWidth = (int)(origWidth * scale);
-            int resizedHeight = (int)(origHeight * scale);
+            int resizedWidth = (int)(displayWidth * scale);
+            int resizedHeight = (int)(displayHeight * scale);
 
-            using var resized = bitmap.Resize(
+            using var resized = workingBitmap.Resize(
                 new SKImageInfo(resizedWidth, resizedHeight),
-                SKSamplingOptions.Default);
-
-            if (resized == null)
-                throw new InvalidOperationException("Failed to resize image.");
-
+                SKSamplingOptions.Default) ?? throw new InvalidOperationException("Failed to resize image.");
             int padX = (targetWidth - resizedWidth) / 2;
             int padY = (targetHeight - resizedHeight) / 2;
 
@@ -264,7 +286,15 @@ namespace ObjectDetector.Pages
                 }
             }
 
-            return (inputData, targetWidth, targetHeight, origWidth, origHeight, scale, padX, padY);
+            // Clean up rotated bitmap if we created one
+#if ANDROID
+            if (workingBitmap != bitmap)
+            {
+                workingBitmap.Dispose();
+            }
+#endif
+
+            return (inputData, targetWidth, targetHeight, origWidth, origHeight, scale, padX, padY, displayWidth, displayHeight);
         }
 
         private async void OnCaptureClicked(object sender, EventArgs e)
@@ -316,30 +346,64 @@ namespace ObjectDetector.Pages
             }
         }
 
-        private void DrawDetectionsOnCanvas(SKCanvas canvas, IReadOnlyList<Detection> detections, int canvasWidth, int canvasHeight)
+        private static SKColor GetColorForLabel(string label)
         {
-            var paint = new SKPaint { StrokeWidth = 2, Color = SKColors.Lime, Style = SKPaintStyle.Stroke };
-            var font = new SKFont(SKTypeface.Default, 16);
-            var textPaint = new SKPaint { Color = SKColors.Black, IsAntialias = true };
-            var bgPaint = new SKPaint { Color = SKColor.Parse("#00FF00"), Style = SKPaintStyle.Fill };
+            var hash = label.GetHashCode();
+            var hue = (hash & 0xFF) / 255f;
+            var saturation = 0.7f + ((hash >> 8) & 0x1F) / 255f;
+            var brightness = 0.8f + ((hash >> 16) & 0x1F) / 255f;
+            
+            return SKColor.FromHsv(hue * 360f, saturation * 100f, brightness * 100f);
+        }
+
+        private static void DrawDetectionsOnCanvas(SKCanvas canvas, IReadOnlyList<Detection> detections, int canvasWidth, int canvasHeight)
+        {
+            var (fontSize, strokeWidth, paddingX, paddingY) = DetectionRenderingConfig.GetScaledValues(canvasWidth, canvasHeight);
+
+            var font = new SKFont(SKTypeface.Default, fontSize);
+            var textPaint = new SKPaint { IsAntialias = true, Color = SKColors.White };
 
             foreach (var det in detections)
             {
+                var color = GetColorForLabel(det.Label);
+                var paint = new SKPaint { StrokeWidth = strokeWidth, Color = color, Style = SKPaintStyle.Stroke };
+                
                 var rect = new SKRect(det.X, det.Y, det.X + det.Width, det.Y + det.Height);
                 canvas.DrawRect(rect, paint);
 
                 string label = $"{det.Label} {det.Confidence:P0}";
                 font.MeasureText(label, out SKRect textBounds);
 
-                float textX = det.X;
-                float textY = det.Y - textBounds.Height - 8;
+                float bgWidth = textBounds.Width + paddingX * 2;
+                float bgHeight = textBounds.Height + paddingY * 2;
 
-                canvas.DrawRect(textX, textY, textBounds.Width + 8, textBounds.Height + 4, bgPaint);
-                canvas.DrawText(label, textX + 4, textY + textBounds.Height, SKTextAlign.Left, font, textPaint);
+                float textX = det.X;
+                float textY = det.Y - bgHeight;
+                
+                // If label would go off top, put it inside the box at the top
+                if (textY < 0)
+                    textY = det.Y + paddingY;
+                
+                // If label would go off left edge
+                if (textX < 0)
+                    textX = 0;
+                
+                // If label would go off right edge
+                if (textX + bgWidth > canvasWidth)
+                    textX = canvasWidth - bgWidth;
+                
+                // If label would go off bottom edge (when placed inside box)
+                if (textY + bgHeight > canvasHeight)
+                    textY = canvasHeight - bgHeight;
+
+                var bgPaint = new SKPaint { Color = color, Style = SKPaintStyle.Fill };
+                canvas.DrawRect(textX, textY, bgWidth, bgHeight, bgPaint);
+
+                canvas.DrawText(label, textX + paddingX, textY + textBounds.Height + paddingY, SKTextAlign.Left, font, textPaint);
             }
         }
 
-        private string GetSaveDirectory()
+        private static string GetSaveDirectory()
         {
 #if ANDROID
             return Path.Combine(Android.OS.Environment.GetExternalStoragePublicDirectory(
@@ -370,133 +434,5 @@ namespace ObjectDetector.Pages
             }
         }
 #endif
-
-        private async void OnOpenFolderClicked(object sender, EventArgs e)
-        {
-            try
-            {
-                string saveDir = GetSaveDirectory();
-
-#if WINDOWS
-                Process.Start("explorer.exe", saveDir);
-#elif ANDROID
-                OpenAndroidFolder(saveDir);
-#elif IOS || MACCATALYST
-                await Launcher.OpenAsync(new OpenFileRequest
-                {
-                    File = new ReadOnlyFile(saveDir)
-                });
-#else
-                await DisplayAlertAsync("Folder Location", $"Files saved to:\n{saveDir}", "OK");
-#endif
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Open folder error: {ex}");
-                string saveDir = GetSaveDirectory();
-                await DisplayAlertAsync("Folder Location", $"Files saved to:\n{saveDir}", "OK");
-            }
-        }
-
-#if ANDROID
-        private void OpenAndroidFolder(string saveDir)
-        {
-            try
-            {
-                var intent = new Android.Content.Intent(Android.Content.Intent.ActionView);
-                var uri = Android.Net.Uri.Parse(saveDir);
-                intent.SetData(uri);
-                Android.App.Application.Context.StartActivity(intent);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to open folder: {ex.Message}");
-            }
-        }
-#endif
-    }
-
-    public class DetectionDrawable : IDrawable
-    {
-        private IReadOnlyList<Detection> _detections = Array.Empty<Detection>();
-        private bool _showDetections = true;
-        private double _originalWidth = 640;
-        private double _originalHeight = 640;
-        private double _displayWidth = 640;
-        private double _displayHeight = 640;
-        private static readonly Dictionary<string, Color> _colorCache = new Dictionary<string, Color>();
-
-        public void UpdateDetections(IReadOnlyList<Detection> detections, double originalWidth, double originalHeight, double displayWidth, double displayHeight)
-        {
-            _detections = detections;
-            _originalWidth = originalWidth;
-            _originalHeight = originalHeight;
-            _displayWidth = displayWidth > 0 ? displayWidth : 640;
-            _displayHeight = displayHeight > 0 ? displayHeight : 640;
-        }
-
-        public void SetShowDetections(bool show)
-        {
-            _showDetections = show;
-        }
-
-        public IReadOnlyList<Detection> GetCurrentDetections() => _detections;
-
-        public void Draw(ICanvas canvas, RectF dirtyRect)
-        {
-            if (!_showDetections || _detections.Count == 0)
-                return;
-
-            // Calculate aspect-fit scaling to match CameraView display
-            float scaleX = (float)(dirtyRect.Width / _originalWidth);
-            float scaleY = (float)(dirtyRect.Height / _originalHeight);
-            float scale = Math.Min(scaleX, scaleY);
-
-            // Calculate letterbox offsets (if any)
-            float offsetX = (dirtyRect.Width - (float)_originalWidth * scale) / 2f;
-            float offsetY = (dirtyRect.Height - (float)_originalHeight * scale) / 2f;
-
-            foreach (var detection in _detections)
-            {
-                var color = GetColorForLabel(detection.Label);
-
-                // Scale and offset the detection coordinates
-                float x = detection.X * scale + offsetX;
-                float y = detection.Y * scale + offsetY;
-                float w = detection.Width * scale;
-                float h = detection.Height * scale;
-
-                // Draw bounding box
-                canvas.StrokeColor = color;
-                canvas.StrokeSize = 3;
-                canvas.DrawRectangle(x, y, w, h);
-
-                // Draw label background
-                canvas.FillColor = color.WithAlpha(0.7f);
-                float labelHeight = 20;
-                float labelWidth = 150;
-                canvas.FillRectangle(x, y - labelHeight, labelWidth, labelHeight);
-
-                // Draw label text
-                canvas.FontColor = Colors.White;
-                canvas.FontSize = 14;
-                canvas.DrawString($"{detection.Label} {detection.Confidence:P0}", x + 2, y - 5, HorizontalAlignment.Left);
-            }
-        }
-
-        private static Color GetColorForLabel(string label)
-        {
-            if (_colorCache.TryGetValue(label, out var color))
-                return color;
-
-            var hash = label.GetHashCode();
-            var r = (hash & 0xFF) / 255f;
-            var g = ((hash >> 8) & 0xFF) / 255f;
-            var b = ((hash >> 16) & 0xFF) / 255f;
-
-            color = new Color(r, g, b);
-            _colorCache[label] = color;
-            return color;
-        }
     }
 }
