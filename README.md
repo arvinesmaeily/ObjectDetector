@@ -76,7 +76,7 @@ ObjectDetector/
 #### Runtime Requirements
 * **Display**: Minimum 1280x720 resolution recommended
 * **Camera**: Required for real-time detection mode
-* **Storage**: ~500 MB for app and models
+* **Storage**: ~200 MB for Android and ~300 MB for Windows
 
 ### Installation
 
@@ -94,11 +94,11 @@ ObjectDetector/
 
 4. Build and run the project (F5)
 
-#### Option 2: Download Release (Coming Soon)
+#### Option 2: Download Release
 
 1. Navigate to the [**Releases**](https://github.com/arvinesmaeily/ObjectDetector/releases) page
 2. Download the installer for your platform
-3. Install and run the application
+3. Follow the instruction in each release to install and run the application
 
 ---
 
