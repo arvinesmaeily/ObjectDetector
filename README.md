@@ -293,12 +293,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 📄 License
-
-This work is under an [MIT](https://choosealicense.com/licenses/mit/) License. Visit [LICENSE](https://github.com/arvinesmaeily/ObjectDetector/blob/master/LICENSE.txt) for more info.
-
----
-
 ## 🙏 Acknowledgments
 
 * [ONNX Runtime](https://github.com/microsoft/onnxruntime) - High-performance inference engine
@@ -309,8 +303,6 @@ This work is under an [MIT](https://choosealicense.com/licenses/mit/) License. V
 
 ---
 
-## 📧 Contact
+## 📄 License
 
-Arvin Esmaeily - [@arvinesmaeily](https://github.com/arvinesmaeily)
-
-Project Link: [https://github.com/arvinesmaeily/ObjectDetector](https://github.com/arvinesmaeily/ObjectDetector)
+This work is under an [MIT](https://choosealicense.com/licenses/mit/) License. Visit [LICENSE](https://github.com/arvinesmaeily/ObjectDetector/blob/master/LICENSE.txt) for more info.
